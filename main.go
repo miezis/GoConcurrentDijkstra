@@ -81,7 +81,7 @@ func generateMatrix(vertexes int) {
 		}
 	}
 
-	writeTofile(a)
+	writeToFile(a)
 }
 
 func writeToFile(graph [][]int) {

@@ -1,74 +1,114 @@
+/*
+============================================================================
+Mantas Miežinas, IFF-2
+Individualus darbas (main.go)
+============================================================================
+*/
+
 package main
 
-import "./graph"
-import "fmt"
-import "time"
-import "strconv"
-import "os"
-import "bufio"
-import "strings"
-import "runtime"
-import "flag"
-import "math/rand"
-import "sync"
+import (
+	"./graph"
+	"bufio"
+	"flag"
+	"fmt"
+	"math/rand"
+	"os"
+	"runtime"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+)
 
+//maksimali integer tipo reikšmė
 const MaxInt = int(^uint(0) >> 1)
 
-var DataFile string
-var coreNum int
-var gen int
-var showRes bool
+var DataFile string //duomenų failo pavadinimas
+var coreNum int     //procesų kiekis
+var gen int         //keliu viršūnių grafą generuoti
+var showRes bool    //ar spausdinti rezultatus
 
+//Funkcija, ivykdoma pati pirma, pasiima komandines eilutes parametrus
 func init() {
+	//nustatome kiek procesu maksimaliai gales dirbti vienu metu
 	flag.IntVar(&coreNum, "cores", runtime.NumCPU(), "Define number of maximum processes.")
+	//nustatome pradiniu duomenu failo pavadinima
 	flag.StringVar(&DataFile, "f", "MiezinasM_IND.txt", "Filename, where data is stored.")
+	//nustatome generuojamo grafo virsuniu kieki, jei 0 - grafo negeneruojame, o skaitome is duomenu failo
 	flag.IntVar(&gen, "g", 0, "If it is more than 0, then a graph with specified vertices count will be generated.")
+	//nustato ar spausdinti rezultatus i terminala, ar ne
 	flag.BoolVar(&showRes, "p", false, "If defined, results will be printed to your console.")
+	//nuskaitome komandines eilutes parametrus
 	flag.Parse()
 }
 
 func main() {
+	//nustatome maksimalų procesų kiekį
 	runtime.GOMAXPROCS(coreNum)
+	//kintamasis sinchronizacijai
 	var done sync.WaitGroup
-
+	//kintamieji, į kuriuos dėsime rezultatus
 	dist := map[string]map[string]int{}
 	prev := map[string]map[string]string{}
+	//inicializuojam naują grafą, saugome nuorodą į jį
 	graph := graph.New()
 
+	//jei nurodyta, tai generuojame gretimumo matricą
+	//sugeneruota, ji įrašoma į failą
 	if gen > 0 {
 		generateMatrix(gen)
 	}
 
+	//nuskaitome duomenis, sudedame į grafo struktūra
 	readData(graph)
-	fmt.Println(graph.Len())
 
+	fmt.Println("Procesų kiekis:", coreNum)
+	fmt.Println("Viršūnių kiekis:", graph.Len())
+
+	//keys kintamajame saugome visų viršūnių pavadinimus
 	keys := graph.GetKeys()
 
+	//pradedame skaičiuoti vykdymo laiką
 	t1 := time.Now()
+	//einame per viršūnes, visoms pritaikome Dijkstra
 	for _, key := range keys {
+		//inicializuojame rezultatų struktūras
 		dist[key] = map[string]int{}
 		prev[key] = map[string]string{}
+		//į waitgroup struktūrą pridedame vieną veiksmą
 		done.Add(1)
+		//kviečiame Dijkstra f-ja kaip go routine
 		go Dijkstra(graph, key, dist[key], prev[key], &done)
 	}
-
+	//laukiame, kol visi procesai atliks savo darbą
 	done.Wait()
-
+	//apskaičiuojame kiek truko kelių radimas
 	t2 := time.Since(t1)
-	fmt.Println(t2)
+
+	//jei buvo nurodyta, išvedame rezultatus į terminalą
 	if showRes {
 		resultsPrinter(dist, prev, keys)
 	}
+	fmt.Println("Vykdymo laikas:", t2)
 }
 
+//Pagalbinė f-ja, gražinanti atsitiktinį sk. iš [min, max] intervalo
 func randInt(min int, max int) int {
 	return min + rand.Intn(max-min)
 }
 
+/*
+============================================================================
+generateMatrix
+	Sugeneruoja grafo viršūnių gretimumo matricą. Funkcijos argumentas yra
+	viršūnių kiekis. Sugeneravus kreipiamasi į writeToFile funkciją ir
+	matrica įrašoma į failą.
+============================================================================
+*/
 func generateMatrix(vertexes int) {
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	// allocate composed 2d array
 	a := make([][]int, vertexes)
 	for i := range a {
 		a[i] = make([]int, vertexes)
@@ -84,6 +124,12 @@ func generateMatrix(vertexes int) {
 	writeToFile(a)
 }
 
+/*
+============================================================================
+writeToFile
+	Priima grafo gretimumo matricą ir ją išspausdina į failą.
+============================================================================
+*/
 func writeToFile(graph [][]int) {
 	file, _ := os.Create(DataFile)
 	defer file.Close()
@@ -101,10 +147,15 @@ func writeToFile(graph [][]int) {
 	writer.Flush()
 }
 
+/*
+============================================================================
+readData
+	Nuskaito duomenis iš failo, surašo juos į grafo struktūrą ir gražina
+	per nuorodą.
+============================================================================
+*/
 func readData(graf *graph.Graph) {
-
 	i := 0
-
 	file, _ := os.Open(DataFile)
 	defer file.Close()
 
@@ -125,6 +176,14 @@ func readData(graf *graph.Graph) {
 	}
 }
 
+/*
+============================================================================
+Dijkstra
+	Realizuotas Dijkstra algoritmas, rezultatus surašo į map struktūras,
+	kurios pagal nutylėjimą yra nuorodos tipo, sinchronizacijai naudojame
+	WaitGroup struktūra iš sync paketo.
+============================================================================
+*/
 func Dijkstra(graf *graph.Graph, source string, dist map[string]int, previous map[string]string, done *sync.WaitGroup) {
 	Q := graph.New()
 	dist[source] = 0
@@ -153,6 +212,13 @@ func Dijkstra(graf *graph.Graph, source string, dist map[string]int, previous ma
 	done.Done()
 }
 
+/*
+============================================================================
+minDist
+	Priima atstumų map struktūrą ir likusių viršūnių slice struktūrą,
+	randą viršūnę iki kurios kelias trumpiausias ir gražina jos pavadinimą.
+============================================================================
+*/
 func minDist(dist map[string]int, leftVert []string) string {
 	var minKey string
 	min := MaxInt
@@ -165,12 +231,22 @@ func minDist(dist map[string]int, leftVert []string) string {
 	return minKey
 }
 
+/*
+============================================================================
+resultsPrinter
+	Išspausdina rezultatus į terminalo langą.
+============================================================================
+*/
 func resultsPrinter(dist map[string]map[string]int, prev map[string]map[string]string, keys []string) {
 	for _, key := range keys {
 		fmt.Println("Trumpiausi keliai iš", key, "viršūnės:")
 		for index, _ := range dist[key] {
 			if index != key {
-				fmt.Println("Į viršūnę", index, "atkeliavome iš", prev[key][index], ". Atstumas:", dist[key][index])
+				if prev[key][index] != "undefined" {
+					fmt.Println("Į viršūnę", index, "atkeliavome iš", prev[key][index], ". Atstumas:", dist[key][index])
+				} else {
+					fmt.Println("Į viršūnę", index, "kelio nėra.")
+				}
 			}
 		}
 	}
